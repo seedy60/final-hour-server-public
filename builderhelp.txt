@@ -3,3 +3,38 @@
 /mkmap <name> <minx> <maxx> <miny> <maxy> <minz> <maxz>. makes a new map using the specified data.
 /chmap <optional-name>. Teleport's you into the map you provided. If "name" is omitted, a menu of available maps will appear, allowing you to select which one you want to be transported to.
 /move <player> <x> <y> <z> <optional-map>. Move the player to the specified location. The default value for "map" is "main" if it is left out.
+/mark. Mark the next corner at your current position. Cycles between corner 1 and corner 2.
+/mark1, /mark2. Explicitly set corner 1 or corner 2 at your current position.
+/unmark. Clear both corners and reset the cycle.
+/marks. Speak the current corner positions and the resulting bounding box.
+/place <type> [args]. Insert an element spanning your two marked corners. Supported types:
+    /place platform <tiletype> [class]
+    /place door <walltype> <tiletype> <minpoints> [activates] [class]
+    /place zone <name…>
+    /place playerSpawn [class]
+    /place zombieSpawn [name] [zBound]
+    /place wallbuy <weapon> <weaponCost> <ammoCost>
+    /place interactable [class]
+    /place ambience <sound> [volume]
+    /place soundSource <sound> [volume]
+    /place music <sound>
+    /place reverb [key=value …]  (e.g. decayTime=0.9 density=0.3 diffusion=0.5)
+/here <type> [args]. Insert a point-position element at your current location. Supported types:
+    /here perkMachine <perk> [price] [quantity] [sound]
+    /here powerSwitch [cost]
+    /here window [hp]
+    /here pannable <sound> [volume]
+/del. Delete the element at your current position. If multiple elements share the tile, the server lists them; pick one with /del <number>.
+/del <id>. Delete the element with the given id.
+/setid <oldId|here> <newId>. Assign or rename an element's id. Use "here" to target the element at your current position.
+/setattr <id> <attr> <value>. Change one attribute of an existing element.
+/probe [r]. Speak every element within r tiles of you (default 2).
+/listids. Speak ids near you for renaming or scripting.
+/whatami. Speak the elements at your exact tile.
+/room [walls=wallwood] [floor=wood] [ceil=wood] [door=N|S|E|W|none]. Build a complete room between your two marks: four walls, floor, ceiling, optional doorway centred on the chosen face.
+/ladder [dir=N|S|E|W] [type=metal]. Drop a vertical climbable column at the chosen edge of your marked area, spanning its z range.
+/skylight [walltype=wallglass] [floor=wood]. Build a skylight at the top of your marked area: a floor frame and a door at the ceiling.
+/doorway <walltype> <tiletype> <minpoints>. Alias for /place door.
+/undo. Revert the last builder change to the current map.
+/redo. Re-apply the last undone change.
+/repeat. Re-run your last /place or /here command at your current marks/position.

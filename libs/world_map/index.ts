@@ -82,6 +82,9 @@ export default class WorldMap extends PlayerContainer {
     wrapped: WrappedWorldMapInterface;
     wrappedEvents = new EventEmitter<WrappedEntityInterface>();
     script?: MapScript;
+    undoStack: string[] = [];
+    redoStack: string[] = [];
+    static UNDO_LIMIT = 50;
     private tickExecutor: TickExecutor;
     private destroied: boolean = false;
     constructor(server: Server, name: string, maxx = 10, maxy = 10, maxz = 15) {
@@ -496,7 +499,40 @@ export default class WorldMap extends PlayerContainer {
         }
     }
     async update(newData: string): Promise<void> {
-        // Create a temp map with this data. This is the lazy way around since if the new map errors, we just abort and never overwrite the current map.
+        const previous = this.real_data;
+        await this._applyData(newData);
+        if (previous && previous !== newData) {
+            this.undoStack.push(previous);
+            if (this.undoStack.length > WorldMap.UNDO_LIMIT) {
+                this.undoStack.shift();
+            }
+            this.redoStack = [];
+        }
+    }
+    async undo(): Promise<boolean> {
+        const previous = this.undoStack.pop();
+        if (previous === undefined) return false;
+        const current = this.real_data;
+        await this._applyData(previous);
+        this.redoStack.push(current);
+        if (this.redoStack.length > WorldMap.UNDO_LIMIT) {
+            this.redoStack.shift();
+        }
+        return true;
+    }
+    async redo(): Promise<boolean> {
+        const next = this.redoStack.pop();
+        if (next === undefined) return false;
+        const current = this.real_data;
+        await this._applyData(next);
+        this.undoStack.push(current);
+        if (this.undoStack.length > WorldMap.UNDO_LIMIT) {
+            this.undoStack.shift();
+        }
+        return true;
+    }
+    private async _applyData(newData: string): Promise<void> {
+        // Validate by compiling on a temp map first. If invalid, throw before touching the live map.
         await WorldMap.compileMapXmlFromString(
             new WorldMap(
                 this.server,
@@ -507,7 +543,6 @@ export default class WorldMap extends PlayerContainer {
             ),
             newData
         );
-        // At this point attempting to create a new map with this data did not fail, so the data is most likely safe.
         const path = `maps/${this.mapName}.map`;
         await fs.writeFile(path, newData);
         this.platforms = [];

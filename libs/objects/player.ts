@@ -50,6 +50,10 @@ export default class Player extends entity {
     language_channel_name?: string;
     readonly perks: PerkManager;
     defaultMaxHp = 100;
+    corner1?: { x: number; y: number; z: number; mapName: string };
+    corner2?: { x: number; y: number; z: number; mapName: string };
+    nextMark: 1 | 2 = 1;
+    lastPlace?: string;
     constructor({
         server,
         peer,
@@ -535,6 +539,10 @@ export default class Player extends entity {
         this.send(consts.channel_map, "update_mumble_context", {
             context: map.mapName,
         });
+        this.corner1 = undefined;
+        this.corner2 = undefined;
+        this.nextMark = 1;
+        this.lastPlace = undefined;
         super.change_map(map, x, y, z);
     }
     async loop(): Promise<void> {

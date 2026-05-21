@@ -31,6 +31,7 @@ import Zomby_game from "./zomby_game";
 import { get_distance } from "./movement";
 import User from "./database/models/player";
 import IPBan from "./database/models/ipbans";
+import * as builder from "./map_builder";
 
 type EventCallback = (
     this: Event_handeler,
@@ -1825,6 +1826,165 @@ export default class Event_handeler {
                     }
                 }
                 break;
+            case "mark":
+            case "mark1":
+            case "mark2":
+                if (player.builder) {
+                    const which: 1 | 2 =
+                        commandParts[0] === "mark1"
+                            ? 1
+                            : commandParts[0] === "mark2"
+                            ? 2
+                            : player.nextMark;
+                    const point = {
+                        x: Math.round(player.x),
+                        y: Math.round(player.y),
+                        z: Math.round(player.z),
+                        mapName: player.map.mapName,
+                    };
+                    if (which === 1) {
+                        player.corner1 = point;
+                        if (commandParts[0] === "mark") player.nextMark = 2;
+                    } else {
+                        player.corner2 = point;
+                        if (commandParts[0] === "mark") player.nextMark = 1;
+                    }
+                    player.speak(
+                        `Corner ${which} marked at ${point.x}, ${point.y}, ${point.z}.`
+                    );
+                }
+                break;
+            case "unmark":
+                if (player.builder) {
+                    player.corner1 = undefined;
+                    player.corner2 = undefined;
+                    player.nextMark = 1;
+                    player.speak("Markers cleared.");
+                }
+                break;
+            case "marks":
+                if (player.builder) {
+                    if (!player.corner1 && !player.corner2) {
+                        player.speak("No corners marked.");
+                    } else {
+                        const parts: string[] = [];
+                        if (player.corner1)
+                            parts.push(
+                                `Corner 1 at ${player.corner1.x}, ${player.corner1.y}, ${player.corner1.z}.`
+                            );
+                        if (player.corner2)
+                            parts.push(
+                                `Corner 2 at ${player.corner2.x}, ${player.corner2.y}, ${player.corner2.z}.`
+                            );
+                        if (player.corner1 && player.corner2) {
+                            const b = builder.boundsOf(
+                                player.corner1,
+                                player.corner2
+                            );
+                            parts.push(
+                                `Span ${b.minx} to ${b.maxx} x, ${b.miny} to ${b.maxy} y, ${b.minz} to ${b.maxz} z.`
+                            );
+                        }
+                        player.speak(parts.join(" "));
+                    }
+                }
+                break;
+            case "undo":
+                if (player.builder) {
+                    try {
+                        const ok = await player.map.undo();
+                        player.speak(ok ? "Undone." : "Nothing to undo.");
+                    } catch (err) {
+                        player.speak(`Error while undoing. ${err}`);
+                    }
+                }
+                break;
+            case "redo":
+                if (player.builder) {
+                    try {
+                        const ok = await player.map.redo();
+                        player.speak(ok ? "Redone." : "Nothing to redo.");
+                    } catch (err) {
+                        player.speak(`Error while redoing. ${err}`);
+                    }
+                }
+                break;
+            case "place":
+                if (player.builder) {
+                    await this.handlePlace(player, commandParts.slice(1));
+                }
+                break;
+            case "repeat":
+                if (player.builder) {
+                    if (!player.lastPlace) {
+                        player.speak("Nothing to repeat.");
+                    } else {
+                        const parts = player.lastPlace.split(" ");
+                        if (parts[0] === "place") {
+                            await this.handlePlace(player, parts.slice(1));
+                        } else if (parts[0] === "here") {
+                            await this.handleHere(player, parts.slice(1));
+                        } else {
+                            player.speak("Nothing to repeat.");
+                        }
+                    }
+                }
+                break;
+            case "here":
+                if (player.builder) {
+                    await this.handleHere(player, commandParts.slice(1));
+                }
+                break;
+            case "del":
+                if (player.builder) {
+                    await this.handleDelete(player, commandParts.slice(1));
+                }
+                break;
+            case "setid":
+                if (player.builder) {
+                    await this.handleSetId(player, commandParts.slice(1));
+                }
+                break;
+            case "setattr":
+                if (player.builder) {
+                    await this.handleSetAttr(player, commandParts.slice(1));
+                }
+                break;
+            case "probe":
+                if (player.builder) {
+                    await this.handleProbe(player, commandParts.slice(1));
+                }
+                break;
+            case "listids":
+                if (player.builder) {
+                    this.handleListIds(player);
+                }
+                break;
+            case "whatami":
+                if (player.builder) {
+                    this.handleWhatAmI(player);
+                }
+                break;
+            case "room":
+                if (player.builder) {
+                    await this.handleRoom(player, commandParts.slice(1));
+                }
+                break;
+            case "ladder":
+                if (player.builder) {
+                    await this.handleLadder(player, commandParts.slice(1));
+                }
+                break;
+            case "skylight":
+                if (player.builder) {
+                    await this.handleSkylight(player, commandParts.slice(1));
+                }
+                break;
+            case "doorway":
+                if (player.builder) {
+                    await this.handleDoorway(player, commandParts.slice(1));
+                }
+                break;
             case "move":
                 if (player.builder) {
                     var target = this.server.get_by_username(commandParts[1]);
@@ -2803,5 +2963,752 @@ export default class Event_handeler {
                     }
                 }
         }
+    }
+    private getMarkBounds(player: Player): builder.ElementBounds | null {
+        if (!player.corner1 || !player.corner2) {
+            player.speak("Both corners must be marked first. Use /mark twice.");
+            return null;
+        }
+        if (
+            player.corner1.mapName !== player.map.mapName ||
+            player.corner2.mapName !== player.map.mapName
+        ) {
+            player.speak(
+                "Corners were marked on a different map. Use /unmark and re-mark."
+            );
+            return null;
+        }
+        return builder.boundsOf(player.corner1, player.corner2);
+    }
+    async handlePlace(player: Player, args: string[]): Promise<void> {
+        const type = args[0];
+        if (!type) {
+            player.speak("Usage: /place <type> [args]");
+            return;
+        }
+        const bounds = this.getMarkBounds(player);
+        if (!bounds) return;
+        const boundsAttr = builder.boundsString(bounds);
+        try {
+            let line: string;
+            let label: string;
+            switch (type) {
+                case "platform": {
+                    const tileType = args[1];
+                    if (!tileType) {
+                        player.speak("Usage: /place platform <tiletype> [class]");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "platform",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            type: tileType,
+                            class: args[2],
+                        })
+                    );
+                    label = `${tileType} platform`;
+                    break;
+                }
+                case "door": {
+                    const walltype = args[1];
+                    const tiletype = args[2];
+                    const minpoints = args[3];
+                    if (!walltype || !tiletype || minpoints === undefined) {
+                        player.speak(
+                            "Usage: /place door <walltype> <tiletype> <minpoints> [activates] [class]"
+                        );
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "door",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            walltype,
+                            tiletype,
+                            minpoints,
+                            activates: args[4],
+                            class: args[5],
+                        })
+                    );
+                    label = `${walltype}/${tiletype} door`;
+                    break;
+                }
+                case "zone": {
+                    const name = args.slice(1).join(" ").trim();
+                    if (!name) {
+                        player.speak("Usage: /place zone <name…>");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "zone",
+                        builder.withId({ bounds: boundsAttr }),
+                        name
+                    );
+                    label = `zone "${name}"`;
+                    break;
+                }
+                case "playerSpawn":
+                    line = builder.serializeElement(
+                        "playerSpawn",
+                        builder.withId({ bounds: boundsAttr, class: args[1] })
+                    );
+                    label = "player spawn";
+                    break;
+                case "zombieSpawn":
+                    line = builder.serializeElement(
+                        "zombieSpawn",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            name: args[1],
+                            zBound: args[2],
+                        })
+                    );
+                    label = "zombie spawn";
+                    break;
+                case "wallbuy": {
+                    const weapon = args[1];
+                    const weaponCost = args[2];
+                    const ammoCost = args[3];
+                    if (!weapon || weaponCost === undefined || ammoCost === undefined) {
+                        player.speak(
+                            "Usage: /place wallbuy <weapon> <weaponCost> <ammoCost>"
+                        );
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "wallbuy",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            weaponName: weapon,
+                            weaponCost,
+                            ammoCost,
+                        })
+                    );
+                    label = `${weapon} wallbuy`;
+                    break;
+                }
+                case "interactable":
+                    line = builder.serializeElement(
+                        "interactable",
+                        builder.withId({ bounds: boundsAttr, class: args[1] })
+                    );
+                    label = "interactable";
+                    break;
+                case "ambience": {
+                    const sound = args[1];
+                    if (!sound) {
+                        player.speak("Usage: /place ambience <sound> [volume]");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "ambience",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            sound,
+                            volume: args[2],
+                        })
+                    );
+                    label = `ambience ${sound}`;
+                    break;
+                }
+                case "soundSource": {
+                    const sound = args[1];
+                    if (!sound) {
+                        player.speak("Usage: /place soundSource <sound> [volume]");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "soundSource",
+                        builder.withId({
+                            bounds: boundsAttr,
+                            sound,
+                            volume: args[2],
+                        })
+                    );
+                    label = `sound source ${sound}`;
+                    break;
+                }
+                case "music": {
+                    const sound = args[1];
+                    if (!sound) {
+                        player.speak("Usage: /place music <sound>");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "music",
+                        builder.withId({ bounds: boundsAttr, sound })
+                    );
+                    label = `music ${sound}`;
+                    break;
+                }
+                case "reverb": {
+                    const kv = this.parseKV(args.slice(1));
+                    line = builder.serializeElement(
+                        "reverb",
+                        builder.withId({ bounds: boundsAttr, ...kv })
+                    );
+                    label = "reverb";
+                    break;
+                }
+                default:
+                    player.speak(`Unknown element type: ${type}.`);
+                    return;
+            }
+            await builder.insertElement(player.map, line);
+            player.lastPlace = `place ${args.join(" ")}`;
+            player.speak(`Placed ${label}.`);
+        } catch (err) {
+            player.speak(`Place failed. ${err}`);
+        }
+    }
+    async handleHere(player: Player, args: string[]): Promise<void> {
+        const type = args[0];
+        if (!type) {
+            player.speak("Usage: /here <type> [args]");
+            return;
+        }
+        const x = Math.round(player.x);
+        const y = Math.round(player.y);
+        const z = Math.round(player.z);
+        const positionAttr = `${x} ${y} ${z}`;
+        try {
+            let line: string;
+            let label: string;
+            switch (type) {
+                case "perkMachine": {
+                    const perk = args[1];
+                    if (!perk) {
+                        player.speak(
+                            "Usage: /here perkMachine <perk> [price] [quantity] [sound]"
+                        );
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "perkMachine",
+                        builder.withId({
+                            position: positionAttr,
+                            perk,
+                            price: args[2],
+                            quantity: args[3],
+                            sound: args[4],
+                        })
+                    );
+                    label = `${perk} perk machine`;
+                    break;
+                }
+                case "powerSwitch":
+                    line = builder.serializeElement(
+                        "powerSwitch",
+                        builder.withId({
+                            position: positionAttr,
+                            cost: args[1] ?? "0",
+                        })
+                    );
+                    label = "power switch";
+                    break;
+                case "window":
+                    line = builder.serializeElement(
+                        "window",
+                        builder.withId({
+                            position: positionAttr,
+                            hp: args[1] ?? "1000",
+                        })
+                    );
+                    label = "window";
+                    break;
+                case "pannable": {
+                    const sound = args[1];
+                    if (!sound) {
+                        player.speak("Usage: /here pannable <sound> [volume]");
+                        return;
+                    }
+                    line = builder.serializeElement(
+                        "pannable",
+                        builder.withId({
+                            position: positionAttr,
+                            sound,
+                            volume: args[2],
+                        })
+                    );
+                    label = `pannable ${sound}`;
+                    break;
+                }
+                default:
+                    player.speak(`Unknown point element type: ${type}.`);
+                    return;
+            }
+            await builder.insertElement(player.map, line);
+            player.lastPlace = `here ${args.join(" ")}`;
+            player.speak(`Placed ${label} at ${x}, ${y}, ${z}.`);
+        } catch (err) {
+            player.speak(`Place failed. ${err}`);
+        }
+    }
+    parseKV(args: string[]): Record<string, string> {
+        const out: Record<string, string> = {};
+        for (const a of args) {
+            const eq = a.indexOf("=");
+            if (eq < 0) continue;
+            const k = a.slice(0, eq);
+            const v = a.slice(eq + 1);
+            if (k) out[k] = v;
+        }
+        return out;
+    }
+    async handleDelete(player: Player, args: string[]): Promise<void> {
+        const x = Math.round(player.x);
+        const y = Math.round(player.y);
+        const z = Math.round(player.z);
+        try {
+            if (args.length >= 1) {
+                const arg = args[0];
+                const asIndex = parseInt(arg, 10);
+                const pending = this.pendingDeletes.get(player.user.username);
+                if (pending && !isNaN(asIndex) && asIndex >= 1 && asIndex <= pending.ids.length) {
+                    const id = pending.ids[asIndex - 1];
+                    this.pendingDeletes.delete(player.user.username);
+                    const el = await builder.deleteElementById(player.map, id);
+                    player.speak(
+                        el
+                            ? `Deleted ${el.elementName}.`
+                            : `No element with that id was found.`
+                    );
+                    return;
+                }
+                const el = await builder.deleteElementById(player.map, arg);
+                player.speak(
+                    el
+                        ? `Deleted ${el.elementName}.`
+                        : `No element with id "${arg}" was found.`
+                );
+                return;
+            }
+            const here = builder.elementsAt(player.map, x, y, z);
+            if (here.length === 0) {
+                player.speak("Nothing here to delete.");
+                return;
+            }
+            if (here.length === 1) {
+                const el = await builder.deleteElementById(
+                    player.map,
+                    here[0].id
+                );
+                player.speak(
+                    el ? `Deleted ${el.elementName}.` : `Delete failed.`
+                );
+                return;
+            }
+            this.pendingDeletes.set(player.user.username, {
+                ids: here.map((e) => e.id),
+            });
+            const summary = here
+                .map((e, i) => `${i + 1}: ${e.elementName} ${e.id}`)
+                .join("; ");
+            player.speak(
+                `Multiple elements here. Choose with /del <number>. ${summary}.`
+            );
+        } catch (err) {
+            player.speak(`Delete failed. ${err}`);
+        }
+    }
+    pendingDeletes = new Map<string, { ids: string[] }>();
+    async handleSetId(player: Player, args: string[]): Promise<void> {
+        if (args.length < 2) {
+            player.speak("Usage: /setid <oldId|here> <newId>");
+            return;
+        }
+        const oldArg = args[0];
+        const newId = args[1];
+        try {
+            if (oldArg === "here") {
+                const here = builder.elementsAt(
+                    player.map,
+                    Math.round(player.x),
+                    Math.round(player.y),
+                    Math.round(player.z)
+                );
+                if (here.length === 0) {
+                    player.speak("Nothing here to rename.");
+                    return;
+                }
+                if (here.length > 1) {
+                    player.speak(
+                        "Multiple elements here; rename by explicit id instead."
+                    );
+                    return;
+                }
+                const ok = await builder.renameElementId(
+                    player.map,
+                    here[0].id,
+                    newId
+                );
+                player.speak(ok ? `Renamed to ${newId}.` : "Rename failed.");
+                return;
+            }
+            const ok = await builder.renameElementId(
+                player.map,
+                oldArg,
+                newId
+            );
+            player.speak(ok ? `Renamed to ${newId}.` : `No element with id "${oldArg}".`);
+        } catch (err) {
+            player.speak(`Rename failed. ${err}`);
+        }
+    }
+    async handleSetAttr(player: Player, args: string[]): Promise<void> {
+        if (args.length < 3) {
+            player.speak("Usage: /setattr <id> <attr> <value>");
+            return;
+        }
+        const [id, attr, ...rest] = args;
+        const value = rest.join(" ");
+        try {
+            const ok = await builder.setElementAttr(player.map, id, attr, value);
+            player.speak(ok ? `Updated ${attr}.` : `No element with id "${id}".`);
+        } catch (err) {
+            player.speak(`Update failed. ${err}`);
+        }
+    }
+    async handleProbe(player: Player, args: string[]): Promise<void> {
+        const r = args[0] ? to_num(args[0]) : 2;
+        const here = builder.elementsWithin(
+            player.map,
+            Math.round(player.x),
+            Math.round(player.y),
+            Math.round(player.z),
+            r
+        );
+        if (here.length === 0) {
+            player.speak("Nothing within reach.");
+            return;
+        }
+        const parts = here.map((e) => {
+            const p = e.properties as any;
+            const desc =
+                e.elementName === "platform"
+                    ? `${p.type} platform`
+                    : e.elementName === "zone"
+                    ? `zone "${p.innerText ?? ""}"`
+                    : e.elementName === "door"
+                    ? `${p.walltype}/${p.tiletype} door`
+                    : e.elementName;
+            return `${desc} at ${e.minx},${e.miny},${e.minz}-${e.maxx},${e.maxy},${e.maxz} (id ${e.id})`;
+        });
+        player.speak(`Within ${r}: ${parts.join("; ")}.`);
+    }
+    handleListIds(player: Player): void {
+        const x = Math.round(player.x);
+        const y = Math.round(player.y);
+        const z = Math.round(player.z);
+        let zoneName: string | undefined;
+        for (const el of player.map.allElements) {
+            if (el.elementName === "zone" && el.in_bound(x, y, z)) {
+                zoneName = (el.properties as any).innerText;
+                break;
+            }
+        }
+        if (!zoneName) {
+            const ids = player.map.allElements
+                .filter((e) => !e.id.startsWith("_"))
+                .map((e) => `${e.elementName}=${e.id}`);
+            player.speak(`No zone here. Map ids: ${ids.slice(0, 20).join("; ")}.`);
+            return;
+        }
+        const inZone: string[] = [];
+        for (const el of player.map.allElements) {
+            if (el.elementName === "zone") continue;
+            if (
+                el.intersects({
+                    minx: x - 50,
+                    maxx: x + 50,
+                    miny: y - 50,
+                    maxy: y + 50,
+                    minz: z - 50,
+                    maxz: z + 50,
+                })
+            ) {
+                inZone.push(`${el.elementName}=${el.id}`);
+            }
+        }
+        player.speak(
+            `Zone "${zoneName}" nearby ids: ${inZone.slice(0, 20).join("; ")}.`
+        );
+    }
+    async handleRoom(player: Player, args: string[]): Promise<void> {
+        const bounds = this.getMarkBounds(player);
+        if (!bounds) return;
+        const opts = this.parseKV(args);
+        const walls = opts.walls ?? "wallwood";
+        const floor = opts.floor ?? "wood";
+        const ceil = opts.ceil ?? "wood";
+        const door = (opts.door ?? "none").toUpperCase();
+        const { minx, maxx, miny, maxy, minz, maxz } = bounds;
+        if (minz === maxz) {
+            player.speak("Room needs a vertical span. Mark corners at different z values.");
+            return;
+        }
+        try {
+            const lines: string[] = [];
+            const wall = (b: builder.ElementBounds) =>
+                builder.serializeElement(
+                    "platform",
+                    builder.withId({ bounds: builder.boundsString(b), type: walls })
+                );
+            lines.push(
+                wall({ minx, maxx, miny, maxy: miny, minz, maxz })
+            );
+            lines.push(
+                wall({ minx, maxx, miny: maxy, maxy, minz, maxz })
+            );
+            lines.push(
+                wall({ minx, maxx: minx, miny, maxy, minz, maxz })
+            );
+            lines.push(
+                wall({ minx: maxx, maxx, miny, maxy, minz, maxz })
+            );
+            lines.push(
+                builder.serializeElement(
+                    "platform",
+                    builder.withId({
+                        bounds: builder.boundsString({
+                            minx,
+                            maxx,
+                            miny,
+                            maxy,
+                            minz,
+                            maxz: minz,
+                        }),
+                        type: floor,
+                    })
+                )
+            );
+            lines.push(
+                builder.serializeElement(
+                    "platform",
+                    builder.withId({
+                        bounds: builder.boundsString({
+                            minx,
+                            maxx,
+                            miny,
+                            maxy,
+                            minz: maxz,
+                            maxz,
+                        }),
+                        type: ceil,
+                    })
+                )
+            );
+            if (door !== "NONE") {
+                const doorH = Math.min(3, maxz - minz);
+                const doorBounds = this.computeDoorBounds(bounds, door, doorH);
+                if (!doorBounds) {
+                    player.speak(`Unknown door direction "${door}".`);
+                    return;
+                }
+                lines.push(
+                    builder.serializeElement(
+                        "door",
+                        builder.withId({
+                            bounds: builder.boundsString(doorBounds),
+                            walltype: walls,
+                            tiletype: floor,
+                            minpoints: "0",
+                        })
+                    )
+                );
+            }
+            await builder.insertElements(player.map, lines);
+            player.speak(
+                `Built room: walls=${walls}, floor=${floor}, ceil=${ceil}${
+                    door !== "NONE" ? `, door=${door}` : ""
+                }.`
+            );
+        } catch (err) {
+            player.speak(`Room failed. ${err}`);
+        }
+    }
+    computeDoorBounds(
+        b: builder.ElementBounds,
+        dir: string,
+        height: number
+    ): builder.ElementBounds | null {
+        const cx = Math.round((b.minx + b.maxx) / 2);
+        const cy = Math.round((b.miny + b.maxy) / 2);
+        const top = b.minz + height;
+        switch (dir) {
+            case "N":
+                return {
+                    minx: cx,
+                    maxx: cx,
+                    miny: b.miny,
+                    maxy: b.miny,
+                    minz: b.minz,
+                    maxz: top,
+                };
+            case "S":
+                return {
+                    minx: cx,
+                    maxx: cx,
+                    miny: b.maxy,
+                    maxy: b.maxy,
+                    minz: b.minz,
+                    maxz: top,
+                };
+            case "W":
+                return {
+                    minx: b.minx,
+                    maxx: b.minx,
+                    miny: cy,
+                    maxy: cy,
+                    minz: b.minz,
+                    maxz: top,
+                };
+            case "E":
+                return {
+                    minx: b.maxx,
+                    maxx: b.maxx,
+                    miny: cy,
+                    maxy: cy,
+                    minz: b.minz,
+                    maxz: top,
+                };
+            default:
+                return null;
+        }
+    }
+    async handleLadder(player: Player, args: string[]): Promise<void> {
+        const bounds = this.getMarkBounds(player);
+        if (!bounds) return;
+        const opts = this.parseKV(args);
+        const dir = (opts.dir ?? "N").toUpperCase();
+        const type = opts.type ?? "metal";
+        const cx = Math.round((bounds.minx + bounds.maxx) / 2);
+        const cy = Math.round((bounds.miny + bounds.maxy) / 2);
+        let x: number, y: number;
+        switch (dir) {
+            case "N":
+                x = cx;
+                y = bounds.miny;
+                break;
+            case "S":
+                x = cx;
+                y = bounds.maxy;
+                break;
+            case "W":
+                x = bounds.minx;
+                y = cy;
+                break;
+            case "E":
+                x = bounds.maxx;
+                y = cy;
+                break;
+            default:
+                player.speak(`Unknown ladder direction "${dir}".`);
+                return;
+        }
+        try {
+            const line = builder.serializeElement(
+                "platform",
+                builder.withId({
+                    bounds: builder.boundsString({
+                        minx: x,
+                        maxx: x,
+                        miny: y,
+                        maxy: y,
+                        minz: bounds.minz,
+                        maxz: bounds.maxz,
+                    }),
+                    type,
+                })
+            );
+            await builder.insertElement(player.map, line);
+            player.speak(
+                `Built ${type} ladder at ${x},${y} from z=${bounds.minz} to ${bounds.maxz}.`
+            );
+        } catch (err) {
+            player.speak(`Ladder failed. ${err}`);
+        }
+    }
+    async handleSkylight(player: Player, args: string[]): Promise<void> {
+        const bounds = this.getMarkBounds(player);
+        if (!bounds) return;
+        const opts = this.parseKV(args);
+        const walltype = opts.walltype ?? "wallglass";
+        const floor = opts.floor ?? "wood";
+        const { minx, maxx, miny, maxy, maxz } = bounds;
+        try {
+            const lines: string[] = [];
+            lines.push(
+                builder.serializeElement(
+                    "platform",
+                    builder.withId({
+                        bounds: builder.boundsString({
+                            minx: minx - 1,
+                            maxx: maxx + 1,
+                            miny: miny - 1,
+                            maxy: maxy + 1,
+                            minz: maxz,
+                            maxz,
+                        }),
+                        type: floor,
+                    })
+                )
+            );
+            lines.push(
+                builder.serializeElement(
+                    "door",
+                    builder.withId({
+                        bounds: builder.boundsString({
+                            minx,
+                            maxx,
+                            miny,
+                            maxy,
+                            minz: maxz,
+                            maxz,
+                        }),
+                        walltype,
+                        tiletype: floor,
+                        minpoints: "0",
+                    })
+                )
+            );
+            await builder.insertElements(player.map, lines);
+            player.speak(
+                `Built skylight ${walltype}/${floor} at z=${maxz}.`
+            );
+        } catch (err) {
+            player.speak(`Skylight failed. ${err}`);
+        }
+    }
+    async handleDoorway(player: Player, args: string[]): Promise<void> {
+        if (args.length < 3) {
+            player.speak("Usage: /doorway <walltype> <tiletype> <minpoints>");
+            return;
+        }
+        await this.handlePlace(player, ["door", ...args]);
+    }
+    handleWhatAmI(player: Player): void {
+        const x = Math.round(player.x);
+        const y = Math.round(player.y);
+        const z = Math.round(player.z);
+        const here = builder.elementsAt(player.map, x, y, z);
+        if (here.length === 0) {
+            player.speak(`Nothing at ${x}, ${y}, ${z}.`);
+            return;
+        }
+        const parts = here.map((e) => {
+            const p = e.properties as any;
+            const desc =
+                e.elementName === "platform"
+                    ? `${p.type} platform`
+                    : e.elementName === "zone"
+                    ? `zone "${p.innerText ?? ""}"`
+                    : e.elementName === "door"
+                    ? `${p.walltype}/${p.tiletype} door`
+                    : e.elementName;
+            return `${desc} (id ${e.id})`;
+        });
+        player.speak(`At ${x}, ${y}, ${z}: ${parts.join("; ")}.`);
     }
 }
