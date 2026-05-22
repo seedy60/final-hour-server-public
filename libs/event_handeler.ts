@@ -3083,7 +3083,7 @@ export default class Event_handeler {
         player: Player,
         attrs: Record<string, string | number | boolean | undefined>
     ): Record<string, string | number | boolean> {
-        const out = this.withGhost(player,attrs);
+        const out = builder.withId(attrs);
         if (player.previewMode) {
             const existing = out.class ? String(out.class) : "";
             out.class = existing ? `${existing} ghost` : "ghost";
@@ -3286,6 +3286,7 @@ export default class Event_handeler {
             player.lastPlace = `place ${args.join(" ")}`;
             player.speak(`Placed ${label}${player.previewMode ? " (preview)" : ""}.`);
         } catch (err) {
+            console.error("[/place]", args, err);
             player.speak(`Place failed. ${err}`);
         }
     }
