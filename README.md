@@ -72,14 +72,35 @@ Add a username to `contributors.txt` on its own line, using the exact in-game us
 
 ## Editing maps
 
-Builders can construct and modify maps from inside the game — no external XML editing required. Players with the `builder` flag on their user record can:
+Builders construct and modify maps from inside the game — no external XML editing required.
 
-- Mark two corners by walking to them and pressing `m` (or typing `/mark`)
-- Drop any element type with `/place …` or `/here …`
-- Use macros (`/room`, `/ladder`, `/skylight`, `/doorway`) for repeated shapes
-- `/undo` and `/redo` the last 50 edits per map
-- Delete or rename elements with `/del`, `/setid`, `/setattr`
+### Granting builder access
 
-Every edit funnels through `WorldMap.update()`, which validates the new XML by compiling it on a throwaway map before overwriting `maps/<name>.map` on disk. Invalid edits are rejected and the live map is untouched.
+A player counts as a builder if any of these are true:
 
-For the full command list, type `/builderhelp` in chat, or read [`builderhelp.txt`](builderhelp.txt).
+- Their username is in `contributors.txt` (contributors are automatically moderators and builders).
+- Their account has been promoted with `/set builder <username> yes` by an existing contributor. The flag is persisted on the user record.
+
+To bootstrap the very first builder on a fresh server, add a username to `contributors.txt` and restart.
+
+### Creating and switching maps
+
+From in-game chat:
+
+- `/mkmap <name> <minx> <maxx> <miny> <maxy> <minz> <maxz>` — create a new map. Writes `maps/<name>.map` and teleports you in.
+- `/chmap <name>` — teleport to an existing map. Omit the name to pick from a menu.
+- `/getmapdata` / `/setmapdata <xml>` — full-map clipboard export/import (kept for emergencies; prefer the marker flow below for routine edits).
+
+### Marker workflow
+
+Once you're in a map as a builder:
+
+- Mark two corners by walking to them and pressing `m` (or typing `/mark`).
+- Drop any element type with `/place …` or `/here …`.
+- Use macros (`/room`, `/ladder`, `/skylight`, `/doorway`) for repeated shapes.
+- `/undo` and `/redo` the last 50 edits per map.
+- Delete or rename elements with `/del`, `/setid`, `/setattr`.
+
+Every edit funnels through `WorldMap.update()`, which validates the new XML by compiling it on a throwaway map before overwriting `maps/<name>.map`. Invalid edits are rejected and the live map is untouched.
+
+For the full command list with arguments, type `/builderhelp` in chat or read [`builderhelp.txt`](builderhelp.txt).
