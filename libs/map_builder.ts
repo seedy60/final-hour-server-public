@@ -266,6 +266,94 @@ export async function setElementAttr(
     return true;
 }
 
+export async function commitGhosts(
+    map: WorldMap,
+    ids: string[]
+): Promise<number> {
+    if (ids.length === 0) return 0;
+    for (const id of ids) {
+        const el = map.allElementsIds.get(id);
+        if (el) await ensureIdInXml(map, el);
+    }
+    let data = map.real_data;
+    let count = 0;
+    for (const id of ids) {
+        const el = map.allElementsIds.get(id);
+        if (!el) continue;
+        const re = buildElementRegex(el);
+        const match = re.exec(data);
+        if (!match) continue;
+        const tag = match[0];
+        const currentClass = extractAttr(tag, "class") ?? "";
+        const stripped = currentClass
+            .split(/\s+/)
+            .filter((c) => c && c !== "ghost")
+            .join(" ");
+        const newTag = stripped
+            ? setAttrInTag(tag, "class", stripped)
+            : removeAttrFromTag(tag, "class");
+        data =
+            data.slice(0, match.index) +
+            newTag +
+            data.slice(match.index + tag.length);
+        count++;
+    }
+    if (count > 0) await map.update(data);
+    return count;
+}
+
+export async function cancelGhosts(
+    map: WorldMap,
+    ids: string[]
+): Promise<number> {
+    if (ids.length === 0) return 0;
+    for (const id of ids) {
+        const el = map.allElementsIds.get(id);
+        if (el) await ensureIdInXml(map, el);
+    }
+    let data = map.real_data;
+    let count = 0;
+    for (const id of ids) {
+        const el = map.allElementsIds.get(id);
+        if (!el) continue;
+        const re = buildElementRegex(el);
+        const match = re.exec(data);
+        if (!match) continue;
+        let startIdx = match.index;
+        let endIdx = match.index + match[0].length;
+        const lineStart = data.lastIndexOf("\n", startIdx - 1) + 1;
+        const before = data.slice(lineStart, startIdx);
+        const trailNl = data.slice(endIdx).match(/^[ \t]*\r?\n/);
+        if (/^[ \t]*$/.test(before) && trailNl) {
+            startIdx = lineStart;
+            endIdx += trailNl[0].length;
+        }
+        data = data.slice(0, startIdx) + data.slice(endIdx);
+        count++;
+    }
+    if (count > 0) await map.update(data);
+    return count;
+}
+
+function extractAttr(tag: string, attr: string): string | null {
+    const re = new RegExp(`\\b${escapeRegex(attr)}="([^"]*)"`);
+    const m = re.exec(tag);
+    return m ? m[1] : null;
+}
+
+function setAttrInTag(tag: string, attr: string, value: string): string {
+    const re = new RegExp(`\\b${escapeRegex(attr)}="[^"]*"`);
+    if (re.test(tag)) {
+        return tag.replace(re, `${attr}="${escapeXmlAttr(value)}"`);
+    }
+    return tag.replace(/(\s*\/?>)$/, ` ${attr}="${escapeXmlAttr(value)}"$1`);
+}
+
+function removeAttrFromTag(tag: string, attr: string): string {
+    const re = new RegExp(`\\s+\\b${escapeRegex(attr)}="[^"]*"`);
+    return tag.replace(re, "");
+}
+
 export async function renameElementId(
     map: WorldMap,
     oldId: string,

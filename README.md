@@ -100,6 +100,7 @@ Once you're in a map as a builder:
 - Use macros (`/room`, `/ladder`, `/skylight`, `/doorway`) for repeated shapes.
 - `/undo` and `/redo` the last 50 edits per map.
 - Delete or rename elements with `/del`, `/setid`, `/setattr`.
+- `/preview` enters preview mode: every subsequent `/place`/`/here`/macro is tagged `class="ghost"` and grouped into a batch. Walls still block and floors still hold so the structure behaves like the real thing. End with `/commit` to make it permanent or `/cancel` to delete the whole batch at once.
 
 Every edit funnels through `WorldMap.update()`, which validates the new XML by compiling it on a throwaway map before overwriting `maps/<name>.map`. Invalid edits are rejected and the live map is untouched.
 

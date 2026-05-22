@@ -54,6 +54,8 @@ export default class Player extends entity {
     corner2?: { x: number; y: number; z: number; mapName: string };
     nextMark: 1 | 2 = 1;
     lastPlace?: string;
+    previewMode: boolean = false;
+    previewIds: string[] = [];
     constructor({
         server,
         peer,
@@ -543,6 +545,8 @@ export default class Player extends entity {
         this.corner2 = undefined;
         this.nextMark = 1;
         this.lastPlace = undefined;
+        this.previewMode = false;
+        this.previewIds = [];
         super.change_map(map, x, y, z);
     }
     async loop(): Promise<void> {

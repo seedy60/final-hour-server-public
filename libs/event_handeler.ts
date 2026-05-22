@@ -1985,6 +1985,65 @@ export default class Event_handeler {
                     await this.handleDoorway(player, commandParts.slice(1));
                 }
                 break;
+            case "preview":
+                if (player.builder) {
+                    if (player.previewMode) {
+                        player.speak(
+                            `Preview mode is already on with ${player.previewIds.length} elements. Use /commit or /cancel.`
+                        );
+                    } else {
+                        player.previewMode = true;
+                        player.previewIds = [];
+                        player.speak(
+                            "Preview mode on. Every /place, /here, and macro is tentative until /commit or /cancel."
+                        );
+                    }
+                }
+                break;
+            case "commit":
+                if (player.builder) {
+                    if (!player.previewMode) {
+                        player.speak("Not in preview mode.");
+                    } else if (player.previewIds.length === 0) {
+                        player.previewMode = false;
+                        player.speak("Preview mode off. Nothing to commit.");
+                    } else {
+                        try {
+                            const n = await builder.commitGhosts(
+                                player.map,
+                                player.previewIds
+                            );
+                            player.previewMode = false;
+                            player.previewIds = [];
+                            player.speak(`Committed ${n} element${n === 1 ? "" : "s"}.`);
+                        } catch (err) {
+                            player.speak(`Commit failed. ${err}`);
+                        }
+                    }
+                }
+                break;
+            case "cancel":
+                if (player.builder) {
+                    if (!player.previewMode) {
+                        player.speak("Not in preview mode.");
+                    } else if (player.previewIds.length === 0) {
+                        player.previewMode = false;
+                        player.speak("Preview mode off. Nothing to cancel.");
+                    } else {
+                        try {
+                            const n = await builder.cancelGhosts(
+                                player.map,
+                                player.previewIds
+                            );
+                            player.previewMode = false;
+                            player.previewIds = [];
+                            player.speak(`Cancelled ${n} element${n === 1 ? "" : "s"}.`);
+                        } catch (err) {
+                            player.speak(`Cancel failed. ${err}`);
+                        }
+                    }
+                }
+                break;
             case "move":
                 if (player.builder) {
                     var target = this.server.get_by_username(commandParts[1]);
@@ -2964,6 +3023,18 @@ export default class Event_handeler {
                 }
         }
     }
+    private withGhost(
+        player: Player,
+        attrs: Record<string, string | number | boolean | undefined>
+    ): Record<string, string | number | boolean> {
+        const out = this.withGhost(player,attrs);
+        if (player.previewMode) {
+            const existing = out.class ? String(out.class) : "";
+            out.class = existing ? `${existing} ghost` : "ghost";
+            player.previewIds.push(String(out.id));
+        }
+        return out;
+    }
     private getMarkBounds(player: Player): builder.ElementBounds | null {
         if (!player.corner1 || !player.corner2) {
             player.speak("Both corners must be marked first. Use /mark twice.");
@@ -3001,7 +3072,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "platform",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             type: tileType,
                             class: args[2],
@@ -3022,7 +3093,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "door",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             walltype,
                             tiletype,
@@ -3042,7 +3113,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "zone",
-                        builder.withId({ bounds: boundsAttr }),
+                        this.withGhost(player,{ bounds: boundsAttr }),
                         name
                     );
                     label = `zone "${name}"`;
@@ -3051,14 +3122,14 @@ export default class Event_handeler {
                 case "playerSpawn":
                     line = builder.serializeElement(
                         "playerSpawn",
-                        builder.withId({ bounds: boundsAttr, class: args[1] })
+                        this.withGhost(player,{ bounds: boundsAttr, class: args[1] })
                     );
                     label = "player spawn";
                     break;
                 case "zombieSpawn":
                     line = builder.serializeElement(
                         "zombieSpawn",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             name: args[1],
                             zBound: args[2],
@@ -3078,7 +3149,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "wallbuy",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             weaponName: weapon,
                             weaponCost,
@@ -3091,7 +3162,7 @@ export default class Event_handeler {
                 case "interactable":
                     line = builder.serializeElement(
                         "interactable",
-                        builder.withId({ bounds: boundsAttr, class: args[1] })
+                        this.withGhost(player,{ bounds: boundsAttr, class: args[1] })
                     );
                     label = "interactable";
                     break;
@@ -3103,7 +3174,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "ambience",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             sound,
                             volume: args[2],
@@ -3120,7 +3191,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "soundSource",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: boundsAttr,
                             sound,
                             volume: args[2],
@@ -3137,7 +3208,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "music",
-                        builder.withId({ bounds: boundsAttr, sound })
+                        this.withGhost(player,{ bounds: boundsAttr, sound })
                     );
                     label = `music ${sound}`;
                     break;
@@ -3146,7 +3217,7 @@ export default class Event_handeler {
                     const kv = this.parseKV(args.slice(1));
                     line = builder.serializeElement(
                         "reverb",
-                        builder.withId({ bounds: boundsAttr, ...kv })
+                        this.withGhost(player,{ bounds: boundsAttr, ...kv })
                     );
                     label = "reverb";
                     break;
@@ -3157,7 +3228,7 @@ export default class Event_handeler {
             }
             await builder.insertElement(player.map, line);
             player.lastPlace = `place ${args.join(" ")}`;
-            player.speak(`Placed ${label}.`);
+            player.speak(`Placed ${label}${player.previewMode ? " (preview)" : ""}.`);
         } catch (err) {
             player.speak(`Place failed. ${err}`);
         }
@@ -3186,7 +3257,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "perkMachine",
-                        builder.withId({
+                        this.withGhost(player,{
                             position: positionAttr,
                             perk,
                             price: args[2],
@@ -3200,7 +3271,7 @@ export default class Event_handeler {
                 case "powerSwitch":
                     line = builder.serializeElement(
                         "powerSwitch",
-                        builder.withId({
+                        this.withGhost(player,{
                             position: positionAttr,
                             cost: args[1] ?? "0",
                         })
@@ -3210,7 +3281,7 @@ export default class Event_handeler {
                 case "window":
                     line = builder.serializeElement(
                         "window",
-                        builder.withId({
+                        this.withGhost(player,{
                             position: positionAttr,
                             hp: args[1] ?? "1000",
                         })
@@ -3225,7 +3296,7 @@ export default class Event_handeler {
                     }
                     line = builder.serializeElement(
                         "pannable",
-                        builder.withId({
+                        this.withGhost(player,{
                             position: positionAttr,
                             sound,
                             volume: args[2],
@@ -3240,7 +3311,7 @@ export default class Event_handeler {
             }
             await builder.insertElement(player.map, line);
             player.lastPlace = `here ${args.join(" ")}`;
-            player.speak(`Placed ${label} at ${x}, ${y}, ${z}.`);
+            player.speak(`Placed ${label} at ${x}, ${y}, ${z}${player.previewMode ? " (preview)" : ""}.`);
         } catch (err) {
             player.speak(`Place failed. ${err}`);
         }
@@ -3453,7 +3524,7 @@ export default class Event_handeler {
             const wall = (b: builder.ElementBounds) =>
                 builder.serializeElement(
                     "platform",
-                    builder.withId({ bounds: builder.boundsString(b), type: walls })
+                    this.withGhost(player,{ bounds: builder.boundsString(b), type: walls })
                 );
             lines.push(
                 wall({ minx, maxx, miny, maxy: miny, minz, maxz })
@@ -3470,7 +3541,7 @@ export default class Event_handeler {
             lines.push(
                 builder.serializeElement(
                     "platform",
-                    builder.withId({
+                    this.withGhost(player,{
                         bounds: builder.boundsString({
                             minx,
                             maxx,
@@ -3486,7 +3557,7 @@ export default class Event_handeler {
             lines.push(
                 builder.serializeElement(
                     "platform",
-                    builder.withId({
+                    this.withGhost(player,{
                         bounds: builder.boundsString({
                             minx,
                             maxx,
@@ -3509,7 +3580,7 @@ export default class Event_handeler {
                 lines.push(
                     builder.serializeElement(
                         "door",
-                        builder.withId({
+                        this.withGhost(player,{
                             bounds: builder.boundsString(doorBounds),
                             walltype: walls,
                             tiletype: floor,
@@ -3522,7 +3593,7 @@ export default class Event_handeler {
             player.speak(
                 `Built room: walls=${walls}, floor=${floor}, ceil=${ceil}${
                     door !== "NONE" ? `, door=${door}` : ""
-                }.`
+                }${player.previewMode ? " (preview)" : ""}.`
             );
         } catch (err) {
             player.speak(`Room failed. ${err}`);
@@ -3610,7 +3681,7 @@ export default class Event_handeler {
         try {
             const line = builder.serializeElement(
                 "platform",
-                builder.withId({
+                this.withGhost(player,{
                     bounds: builder.boundsString({
                         minx: x,
                         maxx: x,
@@ -3624,7 +3695,7 @@ export default class Event_handeler {
             );
             await builder.insertElement(player.map, line);
             player.speak(
-                `Built ${type} ladder at ${x},${y} from z=${bounds.minz} to ${bounds.maxz}.`
+                `Built ${type} ladder at ${x},${y} from z=${bounds.minz} to ${bounds.maxz}${player.previewMode ? " (preview)" : ""}.`
             );
         } catch (err) {
             player.speak(`Ladder failed. ${err}`);
@@ -3642,7 +3713,7 @@ export default class Event_handeler {
             lines.push(
                 builder.serializeElement(
                     "platform",
-                    builder.withId({
+                    this.withGhost(player,{
                         bounds: builder.boundsString({
                             minx: minx - 1,
                             maxx: maxx + 1,
@@ -3658,7 +3729,7 @@ export default class Event_handeler {
             lines.push(
                 builder.serializeElement(
                     "door",
-                    builder.withId({
+                    this.withGhost(player,{
                         bounds: builder.boundsString({
                             minx,
                             maxx,
@@ -3675,7 +3746,7 @@ export default class Event_handeler {
             );
             await builder.insertElements(player.map, lines);
             player.speak(
-                `Built skylight ${walltype}/${floor} at z=${maxz}.`
+                `Built skylight ${walltype}/${floor} at z=${maxz}${player.previewMode ? " (preview)" : ""}.`
             );
         } catch (err) {
             player.speak(`Skylight failed. ${err}`);
