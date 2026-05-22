@@ -1995,7 +1995,7 @@ export default class Event_handeler {
                         player.previewMode = true;
                         player.previewIds = [];
                         player.speak(
-                            "Preview mode on. Every /place, /here, and macro is tentative until /commit or /cancel."
+                            "Preview mode on. Use /place, /here, or a macro like /room to add tentative elements, then /commit or /cancel. Marks alone are not part of the preview."
                         );
                     }
                 }
@@ -2006,7 +2006,9 @@ export default class Event_handeler {
                         player.speak("Not in preview mode.");
                     } else if (player.previewIds.length === 0) {
                         player.previewMode = false;
-                        player.speak("Preview mode off. Nothing to commit.");
+                        player.speak(
+                            "Preview mode off. No elements were placed during preview. Marks alone aren't preview content; use /place, /here, or a macro to add elements next time."
+                        );
                     } else {
                         try {
                             const n = await builder.commitGhosts(
@@ -2028,7 +2030,9 @@ export default class Event_handeler {
                         player.speak("Not in preview mode.");
                     } else if (player.previewIds.length === 0) {
                         player.previewMode = false;
-                        player.speak("Preview mode off. Nothing to cancel.");
+                        player.speak(
+                            "Preview mode off. Nothing was placed; marks are not preview content."
+                        );
                     } else {
                         try {
                             const n = await builder.cancelGhosts(
@@ -2042,6 +2046,11 @@ export default class Event_handeler {
                             player.speak(`Cancel failed. ${err}`);
                         }
                     }
+                }
+                break;
+            case "tp":
+                if (player.builder) {
+                    await this.handleTp(player, commandParts.slice(1));
                 }
                 break;
             case "move":
@@ -3022,6 +3031,53 @@ export default class Event_handeler {
                     }
                 }
         }
+    }
+    async handleTp(player: Player, args: string[]): Promise<void> {
+        let x: number;
+        let y: number;
+        let z: number;
+        if (args.length === 1) {
+            const target = args[0].toLowerCase();
+            if (target === "1") {
+                if (!player.corner1) {
+                    player.speak("Corner 1 is not marked.");
+                    return;
+                }
+                ({ x, y, z } = player.corner1);
+            } else if (target === "2") {
+                if (!player.corner2) {
+                    player.speak("Corner 2 is not marked.");
+                    return;
+                }
+                ({ x, y, z } = player.corner2);
+            } else if (target === "center" || target === "centre") {
+                if (!player.corner1 || !player.corner2) {
+                    player.speak("Both corners must be marked first.");
+                    return;
+                }
+                x = Math.round((player.corner1.x + player.corner2.x) / 2);
+                y = Math.round((player.corner1.y + player.corner2.y) / 2);
+                z = Math.round((player.corner1.z + player.corner2.z) / 2);
+            } else {
+                player.speak("Usage: /tp <x> <y> <z>, or /tp 1, /tp 2, /tp center.");
+                return;
+            }
+        } else if (args.length >= 3) {
+            x = to_num(args[0]);
+            y = to_num(args[1]);
+            z = to_num(args[2]);
+        } else {
+            player.speak("Usage: /tp <x> <y> <z>, or /tp 1, /tp 2, /tp center.");
+            return;
+        }
+        if (!player.map.in_bound(x, y, z)) {
+            player.speak(
+                `Out of map bounds (${player.map.minx}..${player.map.maxx}, ${player.map.miny}..${player.map.maxy}, ${player.map.minz}..${player.map.maxz}).`
+            );
+            return;
+        }
+        player.move(x, y, z, false, "teleport", false);
+        player.speak(`Teleported to ${x}, ${y}, ${z}.`);
     }
     private withGhost(
         player: Player,

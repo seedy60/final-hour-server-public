@@ -38,6 +38,8 @@
 /undo. Revert the last builder change to the current map.
 /redo. Re-apply the last undone change.
 /repeat. Re-run your last /place or /here command at your current marks/position.
-/preview. Turn on preview mode. Every subsequent /place, /here, /room, /ladder, /skylight, and /doorway is tagged class="ghost" and remembered. Walls still block and floors still hold you up so you can experience the proposed structure.
+/preview. Turn on preview mode. Every subsequent /place, /here, /room, /ladder, /skylight, and /doorway is tagged class="ghost" and remembered. Walls still block and floors still hold you up so you can experience the proposed structure. Marks themselves are not part of the preview — they're just positions.
 /commit. Strip the ghost tag from your preview set, making the elements permanent, and exit preview mode.
 /cancel. Delete every element in your preview set and exit preview mode.
+/tp <x> <y> <z>. Teleport yourself to the given coordinates in your current map (markers and preview state are preserved, unlike /move which resets them).
+/tp 1, /tp 2, /tp center. Teleport to corner 1, corner 2, or the midpoint of the two marks.
